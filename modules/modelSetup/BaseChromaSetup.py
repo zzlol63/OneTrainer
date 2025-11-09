@@ -82,9 +82,9 @@ class BaseChromaSetup(
                 config.enable_autocast_cache,
             )
 
-        quantize_layers(model.text_encoder, self.train_device, model.text_encoder_train_dtype)
-        quantize_layers(model.vae, self.train_device, model.train_dtype)
-        quantize_layers(model.transformer, self.train_device, model.train_dtype)
+        quantize_layers(model.text_encoder, self.train_device, model.text_encoder_train_dtype, config)
+        quantize_layers(model.vae, self.train_device, model.train_dtype, config)
+        quantize_layers(model.transformer, self.train_device, model.train_dtype, config)
 
     def _setup_embeddings(
             self,
@@ -225,10 +225,13 @@ class BaseChromaSetup(
             )
 
             packed_latent_input = model.pack_latents(latent_input)
-
             image_seq_len = packed_latent_input.shape[1]
             image_attention_mask = torch.full((packed_latent_input.shape[0], image_seq_len), True, dtype=torch.bool, device=text_attention_mask.device)
             attention_mask = torch.cat([text_attention_mask, image_attention_mask], dim=1) if not torch.all(text_attention_mask) else None
+
+            #TODO disabled because of https://github.com/Nerogar/OneTrainer/pull/1109, but it could trigger https://github.com/pytorch/pytorch/issues/165506 again
+            #text_seq_len = text_encoder_output.shape[1]
+            #assert image_seq_len % 16 == 0 and (image_seq_len + text_seq_len) % 16 == 0
 
             packed_predicted_flow = model.transformer(
                 hidden_states=packed_latent_input.to(dtype=model.train_dtype.torch_dtype()),
@@ -329,5 +332,5 @@ class BaseChromaSetup(
             data=data,
             config=config,
             train_device=self.train_device,
-            sigmas=model.noise_scheduler.sigmas.to(device=self.train_device),
+            sigmas=model.noise_scheduler.sigmas,
         ).mean()
